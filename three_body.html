@@ -1,0 +1,201 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Three Body Problem - simulation</title>
+<style>
+  body {
+    background: black;
+    color: white;
+    font-family: Arial, Helvetica, sans-serif;
+    text-align: center;
+  }
+  h1 {
+    margin-top: 20px;
+    font-size: 22px;
+  }
+  p {
+    max-width: 600px;
+    margin: 10px auto 20px auto;
+    font-size: 14px;
+    color: #cccccc;
+  }
+  canvas {
+    background: black;
+    border: 1px solid #444444;
+  }
+  button {
+    margin-top: 10px;
+    padding: 6px 14px;
+    font-size: 14px;
+  }
+</style>
+</head>
+<body>
+
+<h1>Three Body Problem Simulation</h1>
+<p>
+  Three "planets" pulling on each other with gravity, no walls, so they just
+  float freely like they would in space. I started from a Python/pygame
+  version that bounced bodies off the edges of the screen, but that isn't
+  really the three body problem (there aren't any walls in space!) so I
+  rewrote it in JavaScript and took the walls out. Click anywhere to add
+  another body. Sometimes two bodies swing close and one gets flung off
+  the screen - that isn't a bug, it's the three body problem being chaotic
+  (a close pass acts like a gravitational slingshot). Press Restart to
+  start it over.
+</p>
+
+<canvas id="canvas" width="800" height="600"></canvas>
+<br>
+<button onclick="restart()">Restart</button>
+
+<script>
+// This is my three body problem simulation.
+// The idea: every body pulls on every other body with gravity
+// (Newton's law of gravitation), and I add up all those forces to work out
+// how each body accelerates, then use that to update its velocity and
+// position, frame by frame.
+
+const canvas = document.getElementById("canvas");
+const ctx = canvas.getContext("2d");
+
+const G = 2;             // gravitational constant - not the real value, just tuned by trial and error so it looks good
+const MIN_DIST = 20;     // stops the force becoming huge if two bodies get very close (avoids dividing by ~0)
+const MAX_BODIES = 8;
+const TRAIL_LENGTH = 300;  // how many past positions to draw behind each body
+
+const startColors = ["#5da7ff", "#ff6961", "#f4d35e"];
+
+let bodies = [];
+
+function makeBody(x, y, mass, vx, vy, color) {
+  return {
+    x: x,
+    y: y,
+    vx: vx,
+    vy: vy,
+    mass: mass,
+    radius: Math.sqrt(mass) * 2,
+    color: color,
+    trail: [],
+  };
+}
+
+function setup() {
+  bodies = [];
+  // Roughly a triangle in the middle of the canvas, each body given a
+  // small starting push at right angles to where it is - this is basically
+  // what makes them orbit each other instead of just crashing together.
+  const cx = canvas.width / 2;
+  const cy = canvas.height / 2;
+  const side = 180;
+  const height = Math.sqrt(side * side - (side / 2) * (side / 2));
+
+  bodies.push(makeBody(cx - side / 2, cy + height / 3, 12, 0.15, 0.1, startColors[0]));
+  bodies.push(makeBody(cx + side / 2, cy + height / 3, 12, -0.15, 0.1, startColors[1]));
+  bodies.push(makeBody(cx, cy - (2 * height) / 3, 12, 0, -0.15, startColors[2]));
+}
+
+function restart() {
+  setup();
+}
+
+// Work out the gravitational force between two bodies and return it
+// as (fx, fy) components, using basic trig (like we do for resolving
+// forces at an angle in mechanics).
+function gravityForce(a, b) {
+  const dx = b.x - a.x;
+  const dy = b.y - a.y;
+  let distance = Math.sqrt(dx * dx + dy * dy);
+  if (distance < MIN_DIST) distance = MIN_DIST;
+
+  const force = (G * a.mass * b.mass) / (distance * distance); // F = G m1 m2 / r^2
+  const angle = Math.atan2(dy, dx);
+  return {
+    fx: force * Math.cos(angle),
+    fy: force * Math.sin(angle),
+  };
+}
+
+function step() {
+  // for every body, add up the force from every OTHER body
+  for (let i = 0; i < bodies.length; i++) {
+    let totalFx = 0;
+    let totalFy = 0;
+    for (let j = 0; j < bodies.length; j++) {
+      if (i === j) continue;
+      const f = gravityForce(bodies[i], bodies[j]);
+      totalFx += f.fx;
+      totalFy += f.fy;
+    }
+
+    // Newton's second law: a = F / m
+    const ax = totalFx / bodies[i].mass;
+    const ay = totalFy / bodies[i].mass;
+
+    // Simple (Euler) integration - update velocity, then position.
+    // Not as accurate as fancier methods (like Runge-Kutta, which I read a
+    // bit about but haven't used here), so energy isn't perfectly conserved
+    // and orbits drift a bit over time, but it's good enough to see the
+    // three body problem in action and it's easy to follow what's going on.
+    bodies[i].vx += ax;
+    bodies[i].vy += ay;
+  }
+
+  // now actually move everything (done after the loop above so every body
+  // uses the SAME positions when working out forces, rather than some
+  // bodies already having moved and others not)
+  for (const body of bodies) {
+    body.x += body.vx;
+    body.y += body.vy;
+
+    body.trail.push({ x: body.x, y: body.y });
+    if (body.trail.length > TRAIL_LENGTH) {
+      body.trail.shift();
+    }
+  }
+}
+
+function draw() {
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+  for (const body of bodies) {
+    // draw the trail as small dots, like the pygame version I started from
+    ctx.fillStyle = body.color;
+    for (const point of body.trail) {
+      ctx.beginPath();
+      ctx.arc(point.x, point.y, 1, 0, Math.PI * 2);
+      ctx.fill();
+    }
+
+    // draw the body itself
+    ctx.beginPath();
+    ctx.arc(body.x, body.y, body.radius, 0, Math.PI * 2);
+    ctx.fill();
+  }
+}
+
+function loop() {
+  step();
+  draw();
+  requestAnimationFrame(loop);
+}
+
+canvas.addEventListener("click", (e) => {
+  if (bodies.length >= MAX_BODIES) {
+    console.log("Reached the max number of bodies!");
+    return;
+  }
+  const rect = canvas.getBoundingClientRect();
+  const x = e.clientX - rect.left;
+  const y = e.clientY - rect.top;
+  const color = startColors[bodies.length % startColors.length];
+  bodies.push(makeBody(x, y, 10, 0, 0, color));
+});
+
+setup();
+loop();
+</script>
+</body>
+</html>
