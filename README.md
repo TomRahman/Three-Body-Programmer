@@ -7,7 +7,7 @@ The three body problem is the question of predicting how three masses move when 
 
 ## Running it
 
-Download `index.html` and double-click it. That's it — it opens in any browser and starts running.
+Download `index.html` and double click it. That's it, it opens in any browser and starts running.
 
 If the repository has GitHub Pages turned on, there's also a live version at `https://<username>.github.io/<repo-name>/`.
 
